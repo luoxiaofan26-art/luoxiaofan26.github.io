@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GB/T 27930-2015 协议报文解析器</title>
+    <style>
+        :root {
+            --bg: #1a1a2e; --panel-bg: #16213e; --border: #0f3460;
+            --accent: #e94560; --text: #e0e0e0; --header-bg: #0f3460;
+            --success: #00c853; --warn: #ffc107; --info: #2196f3;
+        }
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+        header{background:linear-gradient(135deg,#0f3460,#1a1a2e);padding:20px 30px;border-bottom:2px solid var(--accent);text-align:center;}
+        header h1{font-size:1.8em;color:#fff;letter-spacing:2px;}
+        header p{font-size:.9em;color:#aaa;margin-top:5px;}
+        .container{max-width:1600px;margin:0 auto;padding:20px;}
+
+        .input-section{background:var(--panel-bg);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px;}
+        .input-section label{font-weight:bold;margin-bottom:8px;font-size:1.05em;letter-spacing:1px;display:block;}
+        .input-section label .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;background:var(--info);}
+        .input-section textarea{width:100%;height:120px;background:#0d1b2a;border:1px solid var(--border);color:#00e5ff;font-family:Consolas,monospace;font-size:.92em;padding:12px;border-radius:6px;resize:vertical;outline:none;line-height:1.6;}
+        .input-section textarea:focus{border-color:var(--accent);}
+        .input-section .hint{color:#888;font-size:.76em;margin-top:5px;}
+        .input-section .mode-hint{color:var(--warn);font-size:.8em;margin-top:8px;}
+
+        .btn-row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
+        .btn{padding:10px 26px;border:none;border-radius:6px;cursor:pointer;font-size:.95em;font-weight:bold;letter-spacing:1px;transition:all .3s;white-space:nowrap;}
+        .btn-parse{background:var(--accent);color:#fff;}
+        .btn-parse:hover{background:#ff5a7a;transform:translateY(-1px);}
+        .btn-clear{background:#333;color:#ccc;}.btn-clear:hover{background:#555;}
+        .btn-example{background:transparent;color:var(--info);border:1px solid var(--info);font-size:.82em;padding:8px 14px;}
+        .btn-example:hover{background:rgba(33,150,243,.15);}
+        .btn-tp{background:transparent;color:var(--warn);border:1px solid var(--warn);font-size:.82em;padding:8px 14px;}
+        .btn-tp:hover{background:rgba(255,193,7,.15);}
+
+        .main-panel{display:flex;gap:20px;}
+        .left-panel,.right-panel{flex:1;background:var(--panel-bg);border:1px solid var(--border);border-radius:10px;overflow:hidden;min-width:0;}
+        .panel-header{background:var(--header-bg);padding:12px 18px;font-weight:bold;font-size:1.05em;letter-spacing:1px;display:flex;align-items:center;gap:8px;}
+        .panel-header .dot-indicator{width:10px;height:10px;border-radius:50%;}
+        .panel-content{padding:18px;max-height:700px;overflow-y:auto;}
+
+        .msg-identify{background:linear-gradient(135deg,#0d2137,#0f3460);border:2px solid var(--accent);border-radius:10px;padding:16px 20px;margin-bottom:18px;}
+        .msg-identify .msg-name{font-size:1.3em;font-weight:bold;color:#fff;}
+        .msg-identify .msg-meta{margin-top:6px;font-size:.85em;color:#aaa;display:flex;flex-wrap:wrap;gap:16px;}
+        .msg-identify .msg-meta span{color:var(--accent);}
+        .msg-identify.unknown{border-color:#555;background:linear-gradient(135deg,#1a1a1a,#222);}
+        .msg-identify.unknown .msg-name{color:#888;}
+
+        .frame-info{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;}
+        .info-badge{background:#0d1b2a;border:1px solid var(--border);border-radius:6px;padding:7px 12px;font-family:Consolas,monospace;font-size:.88em;}
+        .info-badge span{color:var(--accent);font-weight:bold;}
+
+        .field-table{width:100%;border-collapse:collapse;font-size:.88em;}
+        .field-table th{background:var(--header-bg);padding:8px 10px;text-align:left;font-size:.83em;letter-spacing:1px;}
+        .field-table td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.05);font-family:Consolas,monospace;font-size:.85em;}
+        .field-table tr:hover td{background:rgba(26,58,92,.4);}
+        .val-hex{color:#00e5ff;}.val-bin{color:#ffab40;font-size:.78em;}.val-dec{color:#69f0ae;}
+
+        .tp-section{margin-bottom:16px;}
+        .tp-section-title{color:var(--warn);font-weight:bold;font-size:.88em;margin-bottom:8px;padding-bottom:4px;border-bottom:1px dashed rgba(255,255,255,.1);}
+        .tp-frame-row{display:flex;align-items:center;gap:8px;padding:6px 10px;margin:2px 0;border-radius:6px;font-family:Consolas,monospace;font-size:.82em;flex-wrap:wrap;}
+        .tp-frame-row.rts{background:rgba(255,193,7,.08);border-left:3px solid #ffc107;}
+        .tp-frame-row.cts{background:rgba(33,150,243,.08);border-left:3px solid #2196f3;}
+        .tp-frame-row.dt{background:rgba(0,200,83,.08);border-left:3px solid #00c853;}
+        .tp-frame-row.ack{background:rgba(156,39,176,.08);border-left:3px solid #9c27b0;}
+        .tp-frame-row .tp-tag{font-weight:bold;font-size:.78em;padding:2px 8px;border-radius:4px;white-space:nowrap;}
+        .tp-frame-row.rts .tp-tag{background:#ffc107;color:#000;}
+        .tp-frame-row.cts .tp-tag{background:#2196f3;color:#fff;}
+        .tp-frame-row.dt .tp-tag{background:#00c853;color:#000;}
+        .tp-frame-row.ack .tp-tag{background:#9c27b0;color:#fff;}
+        .tp-frame-row .tp-detail{color:#aaa;font-size:.85em;}
+
+        .data-section-title{color:var(--warn);font-size:.9em;font-weight:bold;margin:18px 0 10px;padding-bottom:4px;border-bottom:1px dashed rgba(255,255,255,.1);}
+
+        .prop-card{border-radius:10px;margin-bottom:12px;overflow:hidden;border:1px solid rgba(255,255,255,.08);transition:box-shadow .2s;}
+        .prop-card:hover{box-shadow:0 0 20px rgba(233,68,96,.15);}
+        .prop-card.c0{background:rgba(33,150,243,.08);border-left:3px solid #2196f3;}
+        .prop-card.c1{background:rgba(0,200,83,.08);border-left:3px solid #00c853;}
+        .prop-card.c2{background:rgba(255,193,7,.08);border-left:3px solid #ffc107;}
+        .prop-card.c3{background:rgba(156,39,176,.08);border-left:3px solid #9c27b0;}
+        .prop-card.c4{background:rgba(233,68,96,.08);border-left:3px solid #e94560;}
+        .prop-card.c5{background:rgba(0,229,255,.08);border-left:3px solid #00e5ff;}
+        .prop-card.reserved{background:rgba(255,255,255,.015);border-left:2px dashed rgba(255,255,255,.1);}
+
+        .prop-card-header{display:flex;align-items:center;gap:10px;padding:10px 16px;font-size:.85em;color:#aaa;border-bottom:1px solid rgba(255,255,255,.05);flex-wrap:wrap;}
+        .prop-card-header .byte-range{font-family:Consolas,monospace;font-weight:bold;font-size:.95em;}
+        .prop-card.c0 .byte-range{color:#2196f3;}.prop-card.c1 .byte-range{color:#00c853;}
+        .prop-card.c2 .byte-range{color:#ffc107;}.prop-card.c3 .byte-range{color:#9c27b0;}
+        .prop-card.c4 .byte-range{color:#e94560;}.prop-card.c5 .byte-range{color:#00e5ff;}
+        .prop-card.reserved .byte-range{color:#555;}
+
+        .prop-card-body{padding:14px 18px;}
+        .prop-card-body .raw-hex-block{display:inline-flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+        .prop-card-body .raw-hex-block .hb{background:#0d1b2a;border:1px solid rgba(255,255,255,.15);padding:5px 10px;border-radius:4px;font-family:Consolas,monospace;font-size:1em;color:#00e5ff;}
+        .prop-card-body .spn-name{font-weight:bold;font-size:.95em;color:#ccc;margin-bottom:4px;}
+        .prop-card-body .spn-desc{font-size:.85em;color:#999;margin-bottom:6px;}
+        .prop-card-body .spn-result{font-size:1.05em;font-weight:bold;color:#69f0ae;padding:6px 12px;background:rgba(105,240,174,.08);border-radius:6px;display:inline-block;line-height:1.6;}
+        .prop-card.reserved .spn-result{background:rgba(255,255,255,.03);color:#555;}
+
+        .pgn-header{background:linear-gradient(90deg,#0f3460,transparent);padding:10px 14px;border-radius:6px;margin-bottom:14px;font-weight:bold;font-size:1.02em;line-height:1.6;}
+        .pgn-header .pgn-name{color:var(--accent);font-size:1.1em;}
+        .error-msg{background:rgba(233,68,96,.15);border:1px solid var(--accent);border-radius:6px;padding:12px;color:#ff6b81;}
+        .no-data{text-align:center;color:#555;padding:40px;font-size:1em;}
+        .reassemble-info{background:rgba(0,200,83,.08);border:1px solid var(--success);border-radius:8px;padding:12px 16px;margin-bottom:14px;}
+        .reassemble-info b{color:var(--success);}
+
+        @media(max-width:900px){.main-panel{flex-direction:column;}}
+    </style>
+</head>
+<body>
+<header>
+    <h1>⚡ GB/T 27930-2015 协议报文解析器</h1>
+    <p>支持单帧 & 多帧传输协议（TP）— Intel 小端序</p>
+</header>
+
+<div class="container">
+
+<div class="input-section">
+    <label><span class="dot"></span> CAN 报文输入（每行一帧：CAN_ID 数据域）</label>
+    <textarea id="msgInput" placeholder="单帧：&#10;0x1826F456 01 01 00 00 00 00 00 00&#10;&#10;多帧（BCS 通过 TP 传输）：&#10;0x1CEC56F4 10 29 00 06 FF 00 11 00&#10;0x1CECF456 11 06 01 FF FF FF FF FF&#10;0x1CEB56F4 01 5E 13 F6 04 0A 0F 50&#10;0x1CEB56F4 02 00 00 00 00 00 00 00&#10;0x1CEB56F4 03 00 00 00 00 00 00 00&#10;0x1CEB56F4 04 00 00 00 00 00 00 00&#10;0x1CEB56F4 05 00 00 00 00 00 00 00&#10;0x1CEB56F4 06 00 00 00 00 00 00 00&#10;0x1CECF456 13 29 00 06 FF FF FF FF"></textarea>
+    <div class="hint">每行一帧。格式：CAN_ID（十六进制）+ 空格 + 数据字节（十六进制空格分隔）。支持单帧和 TP 多帧。</div>
+    <div class="mode-hint">💡 输入 1 行 → 单帧解析；输入含 TP 帧（0x1CECxxxx / 0x1CEBxxxx）的多行 → 多帧重组解析</div>
+    <div class="btn-row">
+        <button class="btn btn-parse" onclick="parseMessage()">🔍 解析报文</button>
+        <button class="btn btn-clear" onclick="clearAll()">🗑 清空</button>
+        <button class="btn btn-example" onclick="loadExample('chm')">📋 单帧 CHM</button>
+        <button class="btn btn-example" onclick="loadExample('bcl')">📋 单帧 BCL</button>
+        <button class="btn btn-tp" onclick="loadExample('bcs_tp')">🔗 多帧 BCS</button>
+        <button class="btn btn-tp" onclick="loadExample('brm_tp')">🔗 多帧 BRM</button>
+        <button class="btn btn-tp" onclick="loadExample('bcp_tp')">🔗 多帧 BCP</button>
+    </div>
+</div>
+
+<div class="main-panel">
+    <div class="left-panel">
+        <div class="panel-header"><span class="dot-indicator" style="background:var(--info);"></span> CAN ID 报文识别 & 帧拆解</div>
+        <div class="panel-content" id="leftContent"><div class="no-data">👈 粘贴报文后点击"解析报文"</div></div>
+    </div>
+    <div class="right-panel">
+        <div class="panel-header"><span class="dot-indicator" style="background:var(--success);"></span> 数据域详细解析（Intel 小端序）</div>
+        <div class="panel-content" id="rightContent"><div class="no-data">👈 粘贴报文后点击"解析报文"</div></div>
+    </div>
+</div>
+</div>
+
+<script>
+// ===================================================================
+//  GB/T 27930-2015 完整 PGN 数据库
+//  ★ BRM 车辆通信协议软件版本号: 8字节，带结构化的编译日期+版本流水号
+//  ★ BCP 整车动力蓄电池SOC: 2字节(0.1%/bit)
+// ===================================================================
+const PGN_DB = {
+0x002600:{name:'CHM',fullName:'充电机握手报文',phase:'握手阶段',source:'充电机 → BMS',period:'250ms',desc:'充电机在低压辅助供电回路闭合后1s内发送。',data:[{bytes:[0,1,2],name:'充电机通信协议版本号',desc:'当前版本 V1.1：byte1=0x01, byte2=0x01, byte3=0x00',format:'ver3'}]},
+0x002700:{name:'BHM',fullName:'BMS 握手报文',phase:'握手阶段',source:'BMS → 充电机',period:'250ms',desc:'车辆接收CHM后发送。SPN2601用于充电机绝缘自检。',data:[{bytes:[0,1],name:'SPN2601 车辆端绝缘监测允许总电压',desc:'分辨率0.1V/位，0偏移，小端序',format:'u16_0.1_le',unit:'V'}]},
+0x000100:{name:'CRM',fullName:'充电机辨识报文',phase:'辨识阶段',source:'充电机 → BMS',period:'250ms',desc:'充电机自检完成后发送。',data:[{bytes:[0],name:'SPN2560 辨识结果',desc:'0x00=未辨识, 0xAA=已辨识',format:'crm_result'},{bytes:[1,2,3,4],name:'SPN2561 充电机编号',desc:'4字节小端序',format:'u32_le'},{bytes:[5,6,7],name:'SPN2562 区域编码',desc:'3字节标准ASCII码',format:'ascii3_le'}]},
+0x000200:{name:'BRM',fullName:'BMS辨识报文',phase:'辨识阶段',source:'BMS → 充电机',period:'250ms',desc:'车辆接收CRM(SPN2560=0x00)后周期发送。共49字节，超8字节用传输协议。',data:[{bytes:[0,1,2],name:'车辆通信协议版本号',desc:'当前V1.10：byte1=0x01,byte2=0x01,byte3=0x00',format:'ver3'},{bytes:[3],name:'电池类型',desc:'01=铅酸 02=镍氢 03=磷酸铁锂 04=锰酸锂 05=钴酸锂 06=三元 07=聚合物锂离子 08=钛酸锂 FF=其他',format:'bat_type'},{bytes:[4,5],name:'动力蓄电池系统额定容量',desc:'分辨率0.1Ah/位，0偏移，小端序',format:'u16_0.1_le',unit:'Ah'},{bytes:[6,7],name:'动力蓄电池系统额定总电压',desc:'分辨率0.1V/位，0偏移，小端序',format:'u16_0.1_le',unit:'V'},{bytes:[8,9,10,11],name:'电池生产厂商名称',desc:'4字节标准ASCII码',format:'ascii4_le',opt:true},{bytes:[12,13,14,15],name:'电池组序号',desc:'预留，厂商自行定义',format:'hex',opt:true},{bytes:[16],name:'电池组生产日期:年',desc:'1年/位，1985偏移，范围1985-2235',format:'year1985',opt:true},{bytes:[17],name:'电池组生产日期:月',desc:'1月/位，0偏移，1-12',format:'u8',opt:true},{bytes:[18],name:'电池组生产日期:日',desc:'1日/位，0偏移，1-31',format:'u8',opt:true},{bytes:[19,20,21],name:'电池组充电次数',desc:'1次/位，0偏移，BMS统计',format:'u24_le',opt:true},{bytes:[22],name:'电池组产权标识',desc:'0=租赁, 1=车自有',format:'ownership',opt:true},{bytes:[23],name:'预留',format:'u8',opt:true},{bytes:[24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40],name:'扩展车辆识别码(EVIN)',desc:'17字节标准ASCII码',format:'ascii17',opt:true},{bytes:[41,42,43,44,45,46,47,48],name:'车辆通信协议软件版本号',desc:'★ 8字节结构化：byte1=版本流水号, byte2=日, byte3=月, byte4+byte5=年(LE), byte6~8=预留填FFFFFFH',format:'brm_sw_ver',opt:true}]},
+0x000600:{name:'BCP',fullName:'动力蓄电池充电参数',phase:'参数配置阶段',source:'BMS → 充电机',period:'500ms',desc:'车辆接收CRM(0xAA)后发送。共13字节，超8字节用传输协议。',data:[{bytes:[0,1],name:'SPN2816 单体蓄电池最高允许充电电压',desc:'分辨率0.01V/位，0偏移，0~24V',format:'u16_0.01_le',unit:'V'},{bytes:[2,3],name:'SPN2817 最高允许充电电流',desc:'分辨率0.1A/位，-400A偏移，公式:(4000-raw)×0.1',format:'i16_0.1_400_le',unit:'A'},{bytes:[4,5],name:'SPN2818 动力蓄电池标称总能量',desc:'分辨率0.1kWh/位，0偏移',format:'u16_0.1_le',unit:'kWh'},{bytes:[6,7],name:'SPN2819 最高允许充电总电压',desc:'分辨率0.1V/位，0偏移。例: 4C 1D → 0x1D4C=7500 → 750.0V',format:'u16_0.1_le',unit:'V'},{bytes:[8],name:'最高允许温度',desc:'分辨率1℃/位，-30℃偏移',format:'temp_m30',opt:true},{bytes:[9,10],name:'整车动力蓄电池荷电状态(SOC)',desc:'★ 2字节，分辨率0.1%/位，0偏移，小端序',format:'u16_0.1_le',unit:'%',opt:true},{bytes:[11,12],name:'整车动力蓄电池当前总电压',desc:'分辨率0.1V/位，0偏移，小端序',format:'u16_0.1_le',unit:'V',opt:true}]},
+0x000700:{name:'CTS',fullName:'充电机时间同步报文',phase:'参数配置阶段',source:'充电机 → BMS',period:'500ms',data:[{bytes:[0,1,2,3,4,5,6],name:'时间信息(BCD码)',desc:'小端序：byte1=秒,byte2=分,byte3=时,byte4=日,byte5=月,byte6=0x20,byte7=年',format:'bcd_time7_le'}]},
+0x000800:{name:'CML',fullName:'充电机最大输出能力',phase:'参数配置阶段',source:'充电机 → BMS',period:'250ms',data:[{bytes:[0,1],name:'充电机最高充电电压',format:'u16_0.1_le',unit:'V'},{bytes:[2,3],name:'充电机最低充电电压',format:'u16_0.1_le',unit:'V'},{bytes:[4,5],name:'充电机最大充电电流',format:'i16_0.1_400_le',unit:'A'},{bytes:[6,7],name:'充电机最小充电电流',format:'i16_0.1_400_le',unit:'A'}]},
+0x000900:{name:'BRO',fullName:'BMS 充电准备就绪',phase:'参数配置阶段',source:'BMS → 充电机',period:'250ms',data:[{bytes:[0],name:'SPN2829 车辆充电准备好',desc:'0x00=未就绪, 0xAA=已就绪, 0xFF=无效',format:'ready'}]},
+0x000A00:{name:'CRO',fullName:'充电机输出准备就绪',phase:'参数配置阶段',source:'充电机 → BMS',period:'250ms',data:[{bytes:[0],name:'SPN2830 充电机充电准备好',desc:'0x00=未就绪, 0xAA=已就绪, 0xFF=无效',format:'ready'}]},
+0x001000:{name:'BCL',fullName:'电池充电需求',phase:'充电阶段',source:'BMS → 充电机',period:'50ms',data:[{bytes:[0,1],name:'车辆接口充电电压需求',format:'u16_0.1_le',unit:'V'},{bytes:[2,3],name:'车辆接口充电电流需求',format:'i16_0.1_400_le',unit:'A'},{bytes:[4],name:'充电模式',desc:'0x01=恒压, 0x02=恒流',format:'charge_mode'}]},
+0x001100:{name:'BCS',fullName:'电池充电总状态',phase:'充电阶段',source:'BMS → 充电机',period:'250ms',desc:'超8字节用传输协议。',data:[{bytes:[0,1],name:'车辆接口当前电压测量值',format:'u16_0.1_le',unit:'V'},{bytes:[2,3],name:'车辆接口当前电流测量值',format:'i16_0.1_400_le',unit:'A'},{bytes:[4,5],name:'最高单体蓄电池电压及组号',desc:'bit1~12=电压(0.01V/位),bit13~16=组号',format:'cell_voltage_group'},{bytes:[6],name:'当前荷电状态 SOC',desc:'分辨率1%/位，0~100%',format:'soc'},{bytes:[7,8],name:'估算剩余充电时间',desc:'分辨率1min/位，0偏移',format:'u16_le',unit:'min',opt:true}]},
+0x001200:{name:'CCS',fullName:'充电机充电状态',phase:'充电阶段',source:'充电机 → BMS',period:'50ms',data:[{bytes:[0,1],name:'充电输出电压',format:'u16_0.1_le',unit:'V'},{bytes:[2,3],name:'充电输出电流',format:'i16_0.1_400_le',unit:'A'},{bytes:[4,5],name:'累计充电时间',format:'u16_le',unit:'min'},{bytes:[6],name:'充电允许',desc:'bit1~2: 00=暂停, 01=允许',format:'ccs_allow'}]},
+0x001300:{name:'BSM',fullName:'动力蓄电池状态信息',phase:'充电阶段',source:'BMS → 充电机',period:'250ms',data:[{bytes:[0],name:'最高单体蓄电池电压编号',format:'u8_offset1'},{bytes:[1],name:'当前单体蓄电池最高温度',format:'temp_m50'},{bytes:[2],name:'最高温度检测点编号',format:'u8_offset1'},{bytes:[3],name:'当前单体蓄电池最低温度',format:'temp_m50'},{bytes:[4],name:'最低温度检测点编号',format:'u8_offset1'},{bytes:[5],name:'蓄电池状态 Byte6',format:'bsm_byte6'},{bytes:[6],name:'蓄电池状态 Byte7',format:'bsm_byte7'}]},
+0x001500:{name:'BMV',fullName:'单体蓄电池电压',phase:'充电阶段',source:'BMS → 充电机',period:'10s',data:[{bytes:[0,1],name:'#1 单体电压',format:'u16_0.01_le',unit:'V'},{bytes:[2,3],name:'#2 单体电压',format:'u16_0.01_le',unit:'V'},{bytes:[4,5],name:'#3 单体电压',format:'u16_0.01_le',unit:'V'},{bytes:[6,7],name:'#4 单体电压',format:'u16_0.01_le',unit:'V'}]},
+0x001600:{name:'BMT',fullName:'动力蓄电池温度',phase:'充电阶段',source:'BMS → 充电机',period:'10s',data:[{bytes:[0],name:'温度#1',format:'temp_m50'},{bytes:[1],name:'温度#2',format:'temp_m50'},{bytes:[2],name:'温度#3',format:'temp_m50'},{bytes:[3],name:'温度#4',format:'temp_m50'},{bytes:[4],name:'温度#5',format:'temp_m50'},{bytes:[5],name:'温度#6',format:'temp_m50'},{bytes:[6],name:'温度#7',format:'temp_m50'},{bytes:[7],name:'温度#8',format:'temp_m50'}]},
+0x001900:{name:'BST',fullName:'车辆中止充电',phase:'充电结束阶段',source:'BMS → 充电机',period:'10ms',data:[{bytes:[0],name:'车辆中止充电原因',format:'bst_reason'},{bytes:[1,2],name:'车辆中止充电故障原因',format:'bst_fault'},{bytes:[3],name:'车辆中止充电错误原因',format:'bst_error'}]},
+0x001A00:{name:'CST',fullName:'充电机中止充电',phase:'充电结束阶段',source:'充电机 → BMS',period:'10ms',data:[{bytes:[0],name:'充电机中止充电原因',format:'cst_reason'},{bytes:[1,2],name:'充电机中止充电故障原因',format:'cst_fault'},{bytes:[3],name:'充电机中止充电错误原因',format:'cst_error'}]},
+0x001C00:{name:'BSD',fullName:'车辆统计数据',phase:'充电结束阶段',source:'BMS → 充电机',period:'250ms',data:[{bytes:[0],name:'中止SOC',format:'soc'},{bytes:[1,2],name:'单体蓄电池最低电压',format:'u16_0.01_le',unit:'V'},{bytes:[3,4],name:'单体蓄电池最高电压',format:'u16_0.01_le',unit:'V'},{bytes:[5],name:'最低温度',format:'temp_m50'},{bytes:[6],name:'最高温度',format:'temp_m50'}]},
+0x001D00:{name:'CSD',fullName:'充电机统计数据',phase:'充电结束阶段',source:'充电机 → BMS',period:'250ms',data:[{bytes:[0,1],name:'本次充电时间',format:'u16_le',unit:'min'},{bytes:[2,3],name:'输出能量',format:'u16_0.1_le',unit:'kWh'},{bytes:[4,5,6,7],name:'充电机编号',format:'u32_le'}]},
+0x001E00:{name:'BEM',fullName:'BMS 错误报文',phase:'各阶段',source:'BMS → 充电机',period:'事件触发',data:[{bytes:[0],name:'BEM错误码 Byte1',format:'bem_byte1'},{bytes:[1],name:'BEM错误码 Byte2',format:'bem_byte2'}]},
+0x001F00:{name:'CEM',fullName:'充电机错误报文',phase:'各阶段',source:'充电机 → BMS',period:'事件触发',data:[{bytes:[0],name:'CEM错误码 Byte1',format:'cem_byte1'},{bytes:[1],name:'CEM错误码 Byte2',format:'cem_byte2'},{bytes:[2],name:'CEM错误码 Byte3',format:'cem_byte3'}]},
+};
+
+const BAT_TYPES={0x01:'铅酸电池',0x02:'镍氢电池',0x03:'磷酸铁锂电池',0x04:'锰酸锂电池',0x05:'钴酸锂电池',0x06:'三元材料电池',0x07:'聚合物锂离子电池',0x08:'钛酸锂电池',0xFF:'其他电池'};
+const CHG_MODES={0x01:'恒压充电',0x02:'恒流充电'};
+const B2={0:'正常',1:'过高/故障/超时',2:'过低/不可信',3:'保留'};
+const B2N={0:'正常',1:'故障/超时',2:'不可信',3:'保留'};
+const OWNERSHIP={0:'租赁',1:'车自有'};
+
+const TP_CM_PGN=0x00EC00, TP_DT_PGN=0x00EB00;
+const TP_RTS=0x10, TP_CTS=0x11, TP_EOMACK=0x13;
+
+function parseCanId(id){
+    const p=(id>>>26)&7,r=(id>>>25)&1,dp=(id>>>24)&1;
+    const pf=(id>>>16)&0xFF,ps=(id>>>8)&0xFF,sa=id&0xFF;
+    const isPDU1=pf<240;
+    const pgn=isPDU1?((dp<<16)|(pf<<8)):((dp<<16)|(pf<<8)|ps);
+    return {id,hex:id.toString(16).toUpperCase().padStart(8,'0'),p,r,dp,pf,ps,sa,pgn,isPDU1};
+}
+function parseHexBytes(raw){
+    const s=raw.replace(/\s+/g,'').replace(/0x/gi,'');
+    const d=[];for(let i=0;i<s.length;i+=2){if(i+1<s.length){const v=parseInt(s.substring(i,i+2),16);if(!isNaN(v))d.push(v);}}return d;
+}
+function parseOneFrame(line){
+    line=line.trim();if(!line)return null;
+    let idStr,dataStr;
+    const hi=line.indexOf('#');
+    if(hi>=0){idStr=line.substring(0,hi);dataStr=line.substring(hi+1);}
+    else{const parts=line.split(/\s+/);idStr=parts[0];dataStr=parts.slice(1).join(' ');}
+    const id=parseInt(idStr.replace(/^0x/i,''),16);
+    if(isNaN(id)||id>0x1FFFFFFF)return null;
+    const data=parseHexBytes(dataStr);while(data.length<8)data.push(0);
+    return {canId:id,data:data.slice(0,8)};
+}
+function leRaw(data,bytes){let raw=0;for(let i=0;i<bytes.length;i++){raw|=data[bytes[i]]<<(i*8);}return raw>>>0;}
+function leBytes(raw,n){const r=[];for(let i=0;i<n;i++){r.push(raw&0xFF);raw>>>=8;}return r;}
+
+function parseMessage(){
+    const raw=document.getElementById('msgInput').value.trim();
+    if(!raw){showError('请输入 CAN 报文');return;}
+    const lines=raw.split(/\n/).map(l=>l.trim()).filter(l=>l.length>0);
+    const frames=[];for(const line of lines){const f=parseOneFrame(line);if(f)frames.push(f);}
+    if(frames.length===0){showError('未能解析任何有效帧');return;}
+    const hasTP=frames.some(f=>{const ci=parseCanId(f.canId);return ci.pgn===TP_CM_PGN||ci.pgn===TP_DT_PGN;});
+    if(hasTP&&frames.length>1){parseMultiFrame(frames);}
+    else{const f=frames[0];const ci=parseCanId(f.canId);renderLeftSingle(ci,f.data);renderRightPanel(ci,f.data);}
+}
+
+function parseMultiFrame(frames){
+    const tpFrames=[],otherFrames=[];
+    for(const f of frames){const ci=parseCanId(f.canId);
+        if(ci.pgn===TP_CM_PGN){const ctrl=f.data[0];
+            if(ctrl===TP_RTS)tpFrames.push({ci,data:f.data,type:'rts',desc:'RTS — 请求发送'});
+            else if(ctrl===TP_CTS)tpFrames.push({ci,data:f.data,type:'cts',desc:'CTS — 允许发送'});
+            else if(ctrl===TP_EOMACK)tpFrames.push({ci,data:f.data,type:'ack',desc:'EndOfMsgACK — 接收确认'});
+            else tpFrames.push({ci,data:f.data,type:'cm',desc:'TP.CM (0x'+ctrl.toString(16).toUpperCase().padStart(2,'0')+')'});}
+        else if(ci.pgn===TP_DT_PGN)tpFrames.push({ci,data:f.data,type:'dt',desc:'DT — 数据传输帧'});
+        else otherFrames.push(f);
+    }
+    const rtsFrame=tpFrames.find(f=>f.type==='rts');
+    let targetPgn=null,totalSize=0,totalPkts=0;const reassembledData=[];
+    if(rtsFrame){const d=rtsFrame.data;totalSize=leRaw(d,[1,2]);totalPkts=d[3];targetPgn=leRaw(d,[5,6,7]);}
+    if(rtsFrame&&targetPgn!==null){
+        const dtFrames=tpFrames.filter(f=>f.type==='dt').sort((a,b)=>a.data[0]-b.data[0]);
+        const buf=[];for(const dt of dtFrames){for(let i=1;i<8;i++)buf.push(dt.data[i]);}
+        for(let i=0;i<Math.min(totalSize,buf.length);i++)reassembledData.push(buf[i]);
+    }
+    let leftH='';
+    leftH+='<div class="tp-section-title">🔗 多帧传输协议（TP）帧拆解</div><div class="tp-section">';
+    for(const tf of tpFrames){
+        const idHex='0x'+tf.ci.hex,dataHex=tf.data.map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ');
+        let detail='';
+        if(tf.type==='rts'){const sz=leRaw(tf.data,[1,2]),pkts=tf.data[3],pgn=leRaw(tf.data,[5,6,7]),pi=PGN_DB[pgn];detail=`总字节数: ${sz} | 总包数: ${pkts} | 目标PGN: 0x${pgn.toString(16).toUpperCase().padStart(6,'0')}`;if(pi)detail+=` (${pi.name})`;detail+=` | SA: 0x${tf.ci.sa.toString(16).toUpperCase().padStart(2,'0')}`;}
+        else if(tf.type==='cts'){detail=`可发送包数: ${tf.data[1]} | 起始序号: ${tf.data[2]}`;}
+        else if(tf.type==='dt'){const seq=tf.data[0],payload=tf.data.slice(1).map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ');detail=`序号: ${seq} | 载荷: ${payload}`;}
+        else if(tf.type==='ack'){const sz=leRaw(tf.data,[1,2]),pkts=tf.data[3];detail=`总字节数: ${sz} | 总包数: ${pkts} | 接收完成 ✅`;}
+        leftH+=`<div class="tp-frame-row ${tf.type}"><span class="tp-tag">${tf.desc.split(' — ')[0]}</span><span style="color:#00e5ff;">${idHex}</span><span style="color:#aaa;">${dataHex}</span><span class="tp-detail">${detail}</span></div>`;
+    }
+    leftH+='</div>';
+    if(reassembledData.length>0){const pi=PGN_DB[targetPgn],pn=pi?pi.name+' — '+pi.fullName:'未知PGN';const dhs=reassembledData.map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ');leftH+=`<div class="reassemble-info"><b>✅ 重组完成</b><br>目标PGN: <span style="color:#00e5ff;">0x${targetPgn.toString(16).toUpperCase().padStart(6,'0')}</span> (${pn})<br>数据长度: <span style="color:#69f0ae;">${reassembledData.length} 字节</span> (${totalPkts} 包 × 7字节/包)<br>重组数据: <code style="color:#00e5ff;word-break:break-all;">${dhs}</code></div>`;}
+    else if(rtsFrame){leftH+=`<div class="reassemble-info" style="border-color:var(--warn);"><b>⚠️ 未发现 TP.DT 数据帧</b></div>`;}
+    if(otherFrames.length>0){leftH+='<div class="tp-section-title" style="margin-top:14px;">📋 其他非TP帧</div>';for(const of2 of otherFrames){const ci2=parseCanId(of2.canId);leftH+=`<div class="tp-frame-row" style="background:rgba(255,255,255,.02);"><span style="color:#888;">0x${ci2.hex}</span> <span style="color:#aaa;">${of2.data.map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ')}</span></div>`;}}
+    document.getElementById('leftContent').innerHTML=leftH;
+    if(reassembledData.length>0){const ci={pgn:targetPgn,hex:targetPgn.toString(16).toUpperCase().padStart(6,'0'),sa:rtsFrame?rtsFrame.ci.sa:0,isPDU1:true};renderRightPanel(ci,reassembledData);}
+    else{document.getElementById('rightContent').innerHTML='<div class="no-data">无法重组数据。请确保输入包含完整的 TP 帧序列（RTS + DT + EOMACK）。</div>';}
+}
+
+function renderLeftSingle(ci,data){
+    const ph='0x'+ci.pgn.toString(16).toUpperCase().padStart(6,'0'),pi=PGN_DB[ci.pgn];let h='';
+    if(pi){h+=`<div class="msg-identify"><div style="display:flex;align-items:center;gap:8px;"><span style="font-size:1.5em;">📋</span><span class="msg-name">${pi.name} — ${pi.fullName}</span></div><div class="msg-meta"><div>PGN: <span>${ph} (${ci.pgn})</span></div><div>阶段: <span>${pi.phase}</span></div><div>方向: <span>${pi.source}</span></div><div>周期: <span>${pi.period}</span></div></div><div style="margin-top:8px;font-size:.85em;color:#bbb;">${pi.desc||''}</div></div>`;}
+    else{h+=`<div class="msg-identify unknown"><span style="font-size:1.5em;">❓</span> <span class="msg-name">未识别的报文</span><div class="msg-meta"><div>PGN: <span>${ph}</span></div></div></div>`;}
+    h+=`<div class="frame-info"><div class="info-badge">CAN ID: <span>0x${ci.hex}</span></div><div class="info-badge">DLC: <span>${data.length}</span></div><div class="info-badge">PF=<span>0x${ci.pf.toString(16).toUpperCase().padStart(2,'0')} (${ci.pf})</span></div><div class="info-badge">PS=<span>0x${ci.ps.toString(16).toUpperCase().padStart(2,'0')} (${ci.ps})</span></div><div class="info-badge">SA=<span>0x${ci.sa.toString(16).toUpperCase().padStart(2,'0')} (${ci.sa})</span></div><div class="info-badge">类型: <span>${ci.isPDU1?'PDU1 (点对点)':'PDU2 (广播)'}</span></div></div>`;
+    h+='<table class="field-table"><thead><tr><th>字段</th><th>位</th><th>Hex</th><th>二进制</th><th>值</th><th>含义</th></tr></thead><tbody>';
+    h+=ir('P',ci.p,3,26)+ir('R',ci.r,1,25)+ir('DP',ci.dp,1,24)+ir('PF',ci.pf,8,16)+ir('PS',ci.ps,8,8)+ir('SA',ci.sa,8,0);
+    h+='</tbody></table>';
+    const fb=ci.id.toString(2).padStart(29,'0');
+    h+=`<div style="margin-top:14px;"><b>🔢 29-bit 二进制：</b></div><div style="word-break:break-all;font-family:Consolas,monospace;font-size:.85em;margin-top:4px;line-height:1.8;"><span style="color:#e94560;border-bottom:2px solid #e94560;">${fb.substring(0,3)}</span><span style="color:#888;">${fb.substring(3,4)}</span><span style="color:#ffc107;border-bottom:2px solid #ffc107;">${fb.substring(4,5)}</span><span style="color:#2196f3;border-bottom:2px solid #2196f3;">${fb.substring(5,13)}</span><span style="color:#69f0ae;border-bottom:2px solid #69f0ae;">${fb.substring(13,21)}</span><span style="color:#ce93d8;border-bottom:2px solid #ce93d8;">${fb.substring(21,29)}</span></div><div style="font-size:.72em;color:#888;margin-top:3px;"><span style="color:#e94560;">P</span> <span style="color:#888;">R</span> <span style="color:#ffc107;">DP</span> <span style="color:#2196f3;">PF</span> <span style="color:#69f0ae;">PS</span> <span style="color:#ce93d8;">SA</span></div>`;
+    document.getElementById('leftContent').innerHTML=h;
+    function ir(name,val,bits,shift){const hv=val.toString(16).toUpperCase(),bv=val.toString(2).padStart(bits,'0');const descs={'P':'0=最高, 7=最低','R':'保留位=0','DP':'0=SAE标准页','PF':ci.isPDU1?'PF<240→PDU1(点对点)':'PF≥240→PDU2(广播)','PS':ci.isPDU1?'目标地址 DA':'组扩展 GE','SA':ci.sa===0x56?'充电机(0x56)':ci.sa===0xF4?'BMS(0xF4)':'其他'};return`<tr><td><b>${name}</b></td><td>[${shift+bits-1}:${shift}]</td><td class="val-hex">0x${hv}</td><td class="val-bin">${bv}</td><td class="val-dec">${val}</td><td>${descs[name]}</td></tr>`;}
+}
+
+function renderRightPanel(ci,data){
+    const pi=PGN_DB[ci.pgn];let h='';
+    if(pi){h+=`<div class="pgn-header">📋 <span class="pgn-name">${pi.name}</span> — ${pi.fullName} | ${pi.phase} | ${pi.source} | 周期:${pi.period}</div>`;h+='<div class="data-section-title">📊 数据域字段解析（Intel 小端序）</div>';
+        const covered=new Set(),cards=[];
+        pi.data.forEach((it,idx)=>{const maxByte=Math.max(...it.bytes);if(maxByte>=data.length)return;it.bytes.forEach(b=>covered.add(b));const rbs=it.bytes.map(b=>data[b]!==undefined?data[b]:0);const raw=leRaw(data,it.bytes);cards.push({...it,rawBytes:rbs,raw,colorIdx:idx%6});});
+        for(let b=0;b<data.length;b++){const card=cards.find(c=>c.bytes[0]===b);if(card){h+=propCard(card,'c'+card.colorIdx);b=card.bytes[card.bytes.length-1];}else{h+=propCard({bytes:[b],rawBytes:[data[b]],raw:data[b],name:'保留/未定义',desc:'协议未定义此字节',format:'u8_le',unit:'',colorIdx:-1},'reserved');}}}
+    else{h+=`<div class="pgn-header">⚠️ 未识别的 PGN: 0x${ci.pgn.toString(16).toUpperCase().padStart(6,'0')}</div>`;for(let b=0;b<data.length;b++){h+=propCard({bytes:[b],rawBytes:[data[b]],raw:data[b],name:`Byte ${b}`,desc:'原始数据字节',format:'u8_le',unit:'',colorIdx:-1},'reserved');}}
+    document.getElementById('rightContent').innerHTML=h;
+}
+
+function propCard(card,cls){const {bytes,rawBytes,raw,name,desc,format,unit}=card;const bl=bytes.length===1?`Byte ${bytes[0]}`:`Bytes [${bytes[0]} : ${bytes[bytes.length-1]}]`;const hv='0x'+raw.toString(16).toUpperCase().padStart(bytes.length*2,'0');const r=fmtVal(raw,rawBytes,format,unit||'');const rbs=rawBytes.map(b=>'0x'+b.toString(16).toUpperCase().padStart(2,'0')).join(' ');return`<div class="prop-card ${cls}"><div class="prop-card-header"><span class="byte-range">📌 ${bl}</span><span style="color:#888;">小端序拼装: <code style="color:#00e5ff;">${hv}</code></span><span style="color:#888;font-size:.8em;">(原始: ${rbs})</span></div><div class="prop-card-body"><div class="raw-hex-block">${rawBytes.map((b,i)=>`<span class="hb">[${bytes[i]}] 0x${b.toString(16).toUpperCase().padStart(2,'0')}</span>`).join('')}</div><div class="spn-name">${name}</div><div class="spn-desc">${desc||''}</div><div class="spn-result">= ${r}</div></div></div>`;}
+
+function fmtVal(raw,rawBytes,f,u){const un=u?' '+u:'';switch(f){
+    case 'u8':case 'u8_le':return raw+un;
+    case 'u16_le':return raw+un; case 'u32_le':return raw+un; case 'u24_le':return raw+un;
+    case 'u8_offset1':return (raw+1)+un;
+    case 'u16_0.1_le':return (raw*0.1).toFixed(1)+un;
+    case 'u16_0.01_le':return (raw*0.01).toFixed(2)+un;
+    case 'i16_0.1_400_le':return ((4000-raw)*0.1).toFixed(1)+un;
+    case 'ver3':{const b=leBytes(raw,3);return `V${b[0]}.${b[1]}${b[2]!==0?'.'+b[2]:''}`;}
+    case 'temp_m50':return (raw-50)+' ℃';
+    case 'temp_m30':return (raw-30)+' ℃';
+    case 'bat_type':return BAT_TYPES[raw]||'未知(0x'+raw.toString(16).toUpperCase()+')';
+    case 'year1985':return (1985+raw)+'年';
+    case 'ownership':return OWNERSHIP[raw]||'未知';
+    case 'bcd_time7_le':{const b=leBytes(raw,7);return `20${bcd(b[6])}年${bcd(b[4])}月${bcd(b[3])}日 ${bcd(b[2])}:${bcd(b[1])}:${bcd(b[0])}`;}
+    case 'ascii3_le':{const b=leBytes(raw,3);return b.map(c=>c>=32&&c<=126?String.fromCharCode(c):'.').join('');}
+    case 'ascii4_le':{const b=leBytes(raw,4);return b.map(c=>c>=32&&c<=126?String.fromCharCode(c):'.').join('').trim();}
+    case 'ascii17':{return rawBytes.map(c=>c>=32&&c<=126?String.fromCharCode(c):'.').join('').trim();}
+    case 'hex':return '0x'+raw.toString(16).toUpperCase();
+    case 'ready':return raw===0xAA?'✅ 已就绪':raw===0x00?'❌ 未就绪':raw===0xFF?'⚠️ 无效':'未知';
+    case 'charge_mode':return CHG_MODES[raw]||'未知';
+    case 'soc':return raw+' %';
+    case 'crm_result':return raw===0x00?'❌ 未辨识':raw===0xAA?'✅ 已辨识':'未知';
+    case 'ccs_allow':{const v=raw&0x03;return v===0?'⏸ 暂停':v===1?'▶ 允许':'未知';}
+    case 'cell_voltage_group':{const v=raw&0xFFF,g=(raw>>12)&0xF;return`电压:${(v*0.01).toFixed(2)}V | 组号:${g}`;}
+    case 'bsm_byte6':{const sv=raw&3,ss=(raw>>2)&3,sc=(raw>>4)&3,st=(raw>>6)&3;return`单体电压:${B2[sv]} | SOC:${B2N[ss]} | 过流:${B2N[sc]} | 温度:${B2N[st]}`;}
+    case 'bsm_byte7':{const si=raw&3,so=(raw>>2)&3,sa=(raw>>4)&3;return`绝缘:${B2N[si]} | 连接器:${B2N[so]} | 充电允许:${sa===0?'禁止':sa===1?'允许':'不可信'}`;}
+    case 'bst_reason':{const s=raw&3,t=(raw>>2)&3,u=(raw>>4)&3,v=(raw>>6)&3;return`SOC:${s===0?'未达到':s===1?'达到':'不可信'} | 总电压:${t===0?'未达到':t===1?'达到':'不可信'} | 单体电压:${u===0?'未达到':u===1?'达到':'不可信'} | 充电机中止:${v===0?'正常':v===1?'接收CST':'不可信'}`;}
+    case 'bst_fault':{const bits=[{n:'绝缘',o:0},{n:'插座过温',o:2},{n:'线束过温',o:4},{n:'连接器',o:6},{n:'电池过温',o:8},{n:'高压继电器',o:10},{n:'检测点2',o:12},{n:'其他',o:14}];return bits.map(b=>{const v=(raw>>b.o)&3;return b.n+':'+(v===0?'正常':v===1?'故障':'不可信');}).join(' | ');}
+    case 'bst_error':{const s=raw&3,t=(raw>>2)&3,u=(raw>>4)&3;return`电流:${s===0?'正常':s===1?'过大':'不可信'} | 电压:${t===0?'正常':t===1?'异常':'不可信'} | 参数:${u===0?'匹配':u===1?'不匹配':'不可信'}`;}
+    case 'cst_reason':{const s=raw&3,t=(raw>>2)&3,u=(raw>>4)&3,v=(raw>>6)&3;return`设定条件:${s===0?'正常':s===1?'达到中止':'不可信'} | 人工:${t===0?'正常':t===1?'人工中止':'不可信'} | 故障:${u===0?'正常':u===1?'故障中止':'不可信'} | 车辆:${v===0?'正常':v===1?'接收BST':'不可信'}`;}
+    case 'cst_fault':{const bits=[{n:'过温',o:0},{n:'连接器',o:2},{n:'内部过温',o:4},{n:'电量不能传送',o:6},{n:'急停',o:8},{n:'其它',o:10},{n:'自检',o:12},{n:'预充',o:14}];return bits.map(b=>{const v=(raw>>b.o)&3;return b.n+':'+(v===0?'正常':v===1?'故障':'不可信');}).join(' | ');}
+    case 'cst_error':{const s=raw&3,t=(raw>>2)&3,u=(raw>>4)&3;return`电流:${s===0?'匹配':s===1?'不匹配':'不可信'} | 电压:${t===0?'正常':t===1?'异常':'不可信'} | 参数:${u===0?'匹配':u===1?'不匹配':'不可信'}`;}
+    case 'bem_byte1':{const b=[{n:'CRM(0x00)',o:0},{n:'CRM(0xAA)',o:2},{n:'CML',o:4},{n:'CRO',o:6}];return b.map(x=>{const v=(raw>>x.o)&3;return x.n+':'+(v===0?'正常':v===1?'超时':'不可信');}).join(' | ');}
+    case 'bem_byte2':{const b=[{n:'CCS',o:0},{n:'CST',o:2},{n:'CSD',o:4},{n:'预留',o:6}];return b.map(x=>{const v=(raw>>x.o)&3;return x.n+':'+(v===0?'正常':v===1?'超时':'不可信');}).join(' | ');}
+    case 'cem_byte1':{const b=[{n:'BRM',o:0},{n:'BCP',o:2},{n:'BRO',o:4},{n:'预留',o:6}];return b.map(x=>{const v=(raw>>x.o)&3;return x.n+':'+(v===0?'正常':v===1?'超时':'不可信');}).join(' | ');}
+    case 'cem_byte2':{const b=[{n:'BCS',o:0},{n:'BCL',o:2},{n:'BST',o:4},{n:'BSD',o:6}];return b.map(x=>{const v=(raw>>x.o)&3;return x.n+':'+(v===0?'正常':v===1?'超时':'不可信');}).join(' | ');}
+    case 'cem_byte3':{const v=raw&3;return`BSM:${v===0?'正常':v===1?'超时':'不可信'} | 预留`;}
+    // ★ BRM 车辆通信协议软件版本号 — 8字节结构化解析
+    case 'brm_sw_ver':{
+        const b=rawBytes;
+        const verNo=b[0];         // byte1: 版本流水号 0x01~0xFE
+        const day=b[1];           // byte2: 日 0x01~0x1F
+        const month=b[2];         // byte3: 月 0x01~0x0C
+        const year=b[3]|(b[4]<<8);// byte4+byte5: 年(LE) 0x0001~0xFFFE
+        const rsv=b[5]|(b[6]<<8)|(b[7]<<16); // byte6~8: 预留 填 0xFFFFFF
+        const rsvStr=rsv===0xFFFFFF?'(预留，未填写认证授权码)':`预留: 0x${rsv.toString(16).toUpperCase()}`;
+        const hexStr=b.map(v=>v.toString(16).toUpperCase().padStart(2,'0')).join(' ');
+        return `版本流水号: ${verNo} (0x${b[0].toString(16).toUpperCase().padStart(2,'0')})
+| 编译日期: ${year}年${month}月${day}日
+| ${rsvStr}
+示例: 2015年11月10日第16次编译 → byte1=0x10, byte2=0x0A, byte3=0x0B, byte4=0x07, byte5=0xDF, byte6~8=0xFFFFFF`;
+    }
+    default:return raw+un;
+}}
+function bcd(b){return Math.floor(b/16).toString()+(b%16).toString();}
+
+function showError(m){document.getElementById('leftContent').innerHTML=`<div class="error-msg">❌ ${m}</div>`;document.getElementById('rightContent').innerHTML='<div class="no-data">请修正后重新解析</div>';}
+function clearAll(){document.getElementById('msgInput').value='';document.getElementById('leftContent').innerHTML='<div class="no-data">👈 粘贴报文后点击解析</div>';document.getElementById('rightContent').innerHTML='<div class="no-data">👈 粘贴报文后点击解析</div>';}
+
+function loadExample(t){
+    const ex={
+        'chm':'0x1826F456 01 01 00 00 00 00 00 00',
+        'bcl':'0x181056F4 88 13 DC 05 01 00 00 00',
+        'bcs_tp':
+`0x1CEC56F4 10 29 00 06 FF 00 11 00
+0x1CECF456 11 06 01 FF FF FF FF FF
+0x1CEB56F4 01 5E 13 F6 04 0A 0F 50
+0x1CEB56F4 02 00 00 00 00 00 00 00
+0x1CEB56F4 03 00 00 00 00 00 00 00
+0x1CEB56F4 04 00 00 00 00 00 00 00
+0x1CEB56F4 05 00 00 00 00 00 00 00
+0x1CEB56F4 06 00 00 00 00 00 00 00
+0x1CECF456 13 29 00 06 FF FF FF FF`,
+        'brm_tp':
+`0x1CEC56F4 10 31 00 08 FF 00 02 00
+0x1CECF456 11 08 01 FF FF FF FF FF
+0x1CEB56F4 01 01 01 00 03 88 13 4C
+0x1CEB56F4 02 1D 41 42 43 44 FF FF
+0x1CEB56F4 03 FF FF FF FF FF 07 E1
+0x1CEB56F4 04 0B 0A 00 00 01 01 FF
+0x1CEB56F4 05 FF FF FF FF FF FF FF
+0x1CEB56F4 06 FF FF FF FF FF FF FF
+0x1CEB56F4 07 FF FF FF FF FF FF FF
+0x1CEB56F4 08 10 0A 0B 07 DF FF FF
+0x1CECF456 13 31 00 08 FF FF FF FF`,
+        'bcp_tp':
+`0x1CEC56F4 10 0D 00 02 FF 00 06 00
+0x1CECF456 11 02 01 FF FF FF FF FF
+0x1CEB56F4 01 0A 0F B8 0B C8 00 4C
+0x1CEB56F4 02 1D 3C 64 00 4C 1D 00
+0x1CECF456 13 0D 00 02 FF FF FF FF`,
+    };
+    if(ex[t]){document.getElementById('msgInput').value=ex[t];parseMessage();}
+}
+</script>
+</body>
+</html>
